@@ -1,9 +1,10 @@
 
-fn add(a:i8, b:i8){
-    return a+b;
+fn add(a:i8, b:i8) -> i8 {
+    a+b;
 };
 fn main() {
-    add(4,6)
+    let result = add(4,6)
+    println!("The result is: {}", result);
     println!("Hello, world!");
     
 }
