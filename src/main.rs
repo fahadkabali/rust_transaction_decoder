@@ -97,10 +97,12 @@ fn main() {
             sequence,
         });
     }
-    let json_inputs = serde_json::to_string(&inputs).unwrap();
-    // println!("bytes slice first element: {:?}", bytes_slice[0]);
-    println!("version: {}", version);
-    println!("Inputs: {}", json_inputs);
+    let transaction = Transaction {
+        version,
+        inputs,
+    };
+    let mut transaction_json = serde_json::to_string_pretty(&transaction).unwrap();
+    println!("Transaction: {}", transaction_json);
 }
 
 #[cfg(test)]
