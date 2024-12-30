@@ -1,7 +1,14 @@
 use core::fmt;
 use std::io::Read;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+struct Transaction {
+    version: u32,
+    inputs: Vec<Inputs>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct Inputs {
     txid: [u8; 32],
     output_index: u32,
@@ -90,9 +97,10 @@ fn main() {
             sequence,
         });
     }
-    println!("bytes slice first element: {:?}", bytes_slice[0]);
+    let json_inputs = serde_json::to_string(&inputs).unwrap();
+    // println!("bytes slice first element: {:?}", bytes_slice[0]);
     println!("version: {}", version);
-    println!("Inputs: {:?}", inputs);
+    println!("Inputs: {}", json_inputs);
 }
 
 #[cfg(test)]
