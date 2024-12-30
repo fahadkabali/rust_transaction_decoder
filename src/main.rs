@@ -6,6 +6,7 @@ use serde::{Serialize, Deserialize};
 struct Transaction {
     version: u32,
     inputs: Vec<Inputs>,
+    outputs: Vec<Outputs>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,6 +15,11 @@ struct Inputs {
     output_index: u32,
     script_sig: String,
     sequence: u32,
+}
+#[derive(Debug, Serialize, Deserialize)]
+struct Outputs {
+    amount: u64,
+    script_pubkey: String,
 }
 fn read_compact_size(transaction_bytes: &mut &[u8]) -> u64 {
     let mut compact_size = [0_u8; 1];
@@ -59,6 +65,11 @@ fn read_u32(transaction_bytes: &mut &[u8]) -> u32 {
     transaction_bytes.read(&mut buffer).unwrap();
     u32::from_le_bytes(buffer)
 }
+fn read_u64(transaction_bytes: &mut &[u8]) -> u64 {
+    let mut buffer = [0; 8];
+    transaction_bytes.read(&mut buffer).unwrap();
+    u64::from_le_bytes(buffer)
+}
 
 // enum ScriptType {
 //     P2PKH(String),
@@ -97,9 +108,20 @@ fn main() {
             sequence,
         });
     }
+    let output_count = read_compact_size(&mut bytes_slice);
+    let mut outputs = vec![];
+    for _ in 0..output_count {
+        let amount = read_u64(&mut bytes_slice);
+        let script_pubkey = read_script(&mut bytes_slice);
+        outputs.push(Outputs { 
+            amount,
+            script_pubkey 
+        });
+    }
     let transaction = Transaction {
         version,
         inputs,
+        outputs,
     };
     let mut transaction_json = serde_json::to_string_pretty(&transaction).unwrap();
     println!("Transaction: {}", transaction_json);
