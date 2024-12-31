@@ -1,6 +1,6 @@
 use core::fmt;
 use std::io::Read;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, Serializer};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Transaction {
@@ -8,9 +8,14 @@ struct Transaction {
     inputs: Vec<Inputs>,
     outputs: Vec<Outputs>,
 }
+#[derive(Debug, Serialize, Deserialize)]
 struct Amount(u64);
-impl Amount {
-    pub fn to_btc(&self) -> f64 {
+
+trait BitcoinValue {
+    fn to_btc(&self) -> f64;
+}
+impl BitcoinValue for Amount {
+    fn to_btc(&self) -> f64 {
         self.0 as f64 / 100_000_000.0
     }
 }
@@ -25,8 +30,13 @@ struct Inputs {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Outputs {
-    amount: f64,
+    #[serde(serialize_with = "as_btc")]
+    amount: Amount,
     script_pubkey: String,
+}
+fn as_btc<S: Serializer, T: BitcoinValue >(t: &T, s:S) -> Result<S::Ok, S::Error> {
+    let btc = t.to_btc();
+    s.serialize_f64(btc)
 }
 fn read_compact_size(transaction_bytes: &mut &[u8]) -> u64 {
     let mut compact_size = [0_u8; 1];
@@ -118,7 +128,7 @@ fn main() {
     let output_count = read_compact_size(&mut bytes_slice);
     let mut outputs = vec![];
     for _ in 0..output_count {
-        let amount = read_amount(&mut bytes_slice).to_btc();
+        let amount = read_amount(&mut bytes_slice);
         let script_pubkey = read_script(&mut bytes_slice);
         outputs.push(Outputs { 
             amount,
