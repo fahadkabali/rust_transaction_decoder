@@ -217,3 +217,14 @@ impl Decodable for TxOut{
         })
     }
 }
+
+impl Decodable for Transaction{
+    fn consensus_decode <R: BufRead + ?Sized>(r: &mut R) ->Result<Self, Error>{
+        Ok(Transaction{
+            version: u32::consensus_decode(r)?,
+            inputs: Vec::<TxIn>::consensus_decode(r)?,
+            outputs: Vec::<TxOut>::consensus_decode(r)?,
+            lock_time: u32::consensus_decode(r)?,
+        })
+    }
+}
