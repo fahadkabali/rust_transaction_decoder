@@ -1,7 +1,8 @@
-use std::io::BufRead
+use std::io::BufRead;
 // use std::io::{Error as ioError, BufRead}
 use serde::{Serialize, Deserialize, Serializer};
 use std::fmt;
+use sha2::{Sha256, Digest};
 
 
 #[derive(Debug)]
@@ -20,7 +21,6 @@ impl std::error::Error for Error {}
 
 #[derive(Debug)]
 pub struct Transaction {
-    // pub transaction_id: Txid,
     pub version: u32,
     pub inputs: Vec<TxIn>,
     pub outputs: Vec<TxOut>,
@@ -31,12 +31,12 @@ impl Transaction{
     pub fn txid(&self) -> Txid{
         // todo: implement this
         let txid_data = vec![0;32];
-        Txid::new(txid_data)
+        Txid::from_raw_transaction(txid_data)
         }
 }
 
 impl Serialize for Transaction {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>{
         let mut tx = serializer.serialize_struct("Transaction", 5)?;
         tx.serialize_field("transaction_id", &self.txid())?;
         tx.serialize_field("version", &self.version)?;
@@ -55,13 +55,13 @@ impl Txid {
     }
     fn from_raw_transaction(tx: Vec<u8>) -> Txid{
         let mut hasher = Sha256::new();
-        hasher.update(&raw_transaction);
+        hasher.update(&tx);
         let result1 = hasher.finalize();
     
         let mut hasher = Sha256::new();
         hasher.update(&result1);
         let result = hasher.finalize();
-        Txid::from_bytes(result.into())
+        Txid::from_hash(result.into())
     }
 }
 impl Serialize for Txid {
@@ -176,6 +176,7 @@ impl Decodable for Vec<TxIn>{
         for _ in 0..count {
             inputs.push(TxIn::consensus_decode(r)?);
         }
+        Ok(inputs)
     }
 }
 
@@ -205,6 +206,7 @@ impl Decodable for Vec<TxOut>{
         for _ in 0..count {
             outputs.push(TxOut::consensus_decode(r)?);
         }
+        Ok(outputs)
     }
 }
 
