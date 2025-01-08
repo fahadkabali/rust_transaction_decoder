@@ -18,13 +18,34 @@ impl fmt::Display for Error{
 
 impl std::error::Error for Error {}
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct Transaction {
-    pub transaction_id: Txid,
+    // pub transaction_id: Txid,
     pub version: u32,
-    pub inputs: Vec<Inputs>,
-    pub outputs: Vec<Outputs>,
+    pub inputs: Vec<TxIn>,
+    pub outputs: Vec<TxOut>,
     pub lock_time: u32,
+}
+
+impl Transaction{
+    pub fn txid(&self) -> Txid{
+        // todo: implement this
+        let txid_data = vec![0;32];
+        Txid::new(txid_data)
+        }
+}
+
+impl Serialize for Transaction {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error{
+        let mut tx = serializer.serialize_struct("Transaction", 5)?;
+        tx.serialize_field("transaction_id", &self.txid())?;
+        tx.serialize_field("version", &self.version)?;
+        tx.serialize_field("inputs", &self.inputs)?;
+        tx.serialize_field("outputs", &self.outputs)?;
+        tx.serialize_field("lock_time", &self.lock_time)?;
+        tx.end()
+    }
+
 }
 #[derive(Debug, Deserialize)]
 pub struct Txid([u8; 32]);
