@@ -1,6 +1,24 @@
+// use std::io::BufRead
+// use std::io::{Error as ioError, BufRead}
 use serde::{Serialize, Deserialize, Serializer};
+use std::fmt;
 
-#[derive(Debug, Serialize, Deserialize)]
+
+#[derive(Debug)]
+pub enum Error{
+    Io(std::io::Error)
+}
+impl fmt::Display for Error{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Io(e) => write!(f, "IO Error: {}", e)
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+#[derive(Debug, Serialize)]
 pub struct Transaction {
     pub transaction_id: Txid,
     pub version: u32,
@@ -59,4 +77,8 @@ pub struct Outputs {
 fn as_btc<S: Serializer, T: BitcoinValue >(t: &T, s:S) -> Result<S::Ok, S::Error> {
     let btc = t.to_btc();
     s.serialize_f64(btc)
+}
+pub trait Decodable : Sized{
+    fn consensus_decode <R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error>;
+    
 }
