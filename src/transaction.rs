@@ -198,9 +198,21 @@ impl Decodable for Txid{
     }
 }
 
+impl Decodable for Vec<TxOut>{
+    fn consensus_decode <R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error>{
+        let count = CompactSize::consensus_decode(r)?.0;
+        let mut outputs = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            outputs.push(TxOut::consensus_decode(r)?);
+        }
+    }
+}
+
 impl Decodable for TxOut{
     fn consensus_decode <R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error>{
         Ok(TxOut{
+            amount:Amount::from_sat(u64::consensus_decode(r)?),
+            script_pubkey: String::consensus_decode(r)?,
 
         })
     }
