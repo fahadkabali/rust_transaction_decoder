@@ -1,8 +1,12 @@
-use std::io::BufRead;
+use std::io::{BufRead, Write};
 // use std::io::{Error as ioError, BufRead}
-use serde::{Serialize, Deserialize, Serializer};
+use serde::{ser::{SerializeSeq, SerializeStruct}, Serialize, Serializer};
 use std::fmt;
 use sha2::{Sha256, Digest};
+
+
+
+
 
 
 #[derive(Debug)]
@@ -11,7 +15,7 @@ pub enum Error{
 }
 impl fmt::Display for Error{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
+        match self {
             Error::Io(e) => write!(f, "IO Error: {}", e)
         }
     }
@@ -28,7 +32,7 @@ pub struct Transaction {
 }
 
 impl Transaction{
-    pub fn txid(&self) -> Txid{
+    pub fn compute_txid(&self) -> Txid{
         // todo: implement this
         let txid_data = vec![0;32];
         Txid::from_raw_transaction(txid_data)
@@ -47,7 +51,7 @@ impl Serialize for Transaction {
     }
 
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct Txid([u8; 32]);
 impl Txid {
     pub fn from_hash(bytes: [u8; 32]) -> Txid {
@@ -72,7 +76,7 @@ impl Serialize for Txid {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct Amount(u64);
 
 impl Amount {
@@ -91,7 +95,7 @@ impl BitcoinValue for Amount {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct TxIn {
     pub txid: Txid,
     pub output_index: u32,
@@ -99,7 +103,7 @@ pub struct TxIn {
     pub sequence: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct TxOut {
     #[serde(serialize_with = "as_btc")]
     pub amount: Amount,
@@ -117,6 +121,14 @@ pub trait Decodable : Sized{
     fn consensus_decode <R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error>;
     
 }
+impl Decodable for u8 {
+    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+        let mut buffer = [0; 1];
+        r.read_exact(&mut buffer).map_err(Error::Io)?;
+        Ok(buffer[0])
+    }
+}
+
 impl Decodable for u16{
     fn consensus_decode <R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let mut buffer = [0;2];
@@ -145,6 +157,7 @@ impl Decodable for u64{
 impl Decodable for CompactSize{
     fn consensus_decode <R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error>{
         let n = u8::consensus_decode(r)?;
+        // let n = u8::consensus_decode(r)?;
         match n {
             0xFF => {
                 let x = u64::consensus_decode(r)?;
@@ -157,7 +170,8 @@ impl Decodable for CompactSize{
             0xFD => {
                 let x = u16::consensus_decode(r)?;
                 Ok(CompactSize(x as u64))
-            },
+            }
+            n => Ok(CompactSize(n as u64))
         }
     }
 }impl Decodable for String{
@@ -228,5 +242,45 @@ impl Decodable for Transaction{
             outputs: Vec::<TxOut>::consensus_decode(r)?,
             lock_time: u32::consensus_decode(r)?,
         })
+    }
+}
+
+pub trait Encodable{
+    fn consensus_encoder<W: Write>(&self, w: &mut W) -> Result<usize, Error>;
+
+}
+impl Encodable for u8{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let b = self.to_le_bytes();
+        let len = w.write(b.as_slice()).map_err(Error::Io)?;
+        Ok(len)
+    }
+}
+impl Encodable for u16{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let b = self.to_le_bytes();
+        let len = w.write(b.as_slice()).map_err(Error::Io)?;
+        Ok(len)
+    }
+}
+
+impl Encodable for u32 {
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let b = self.to_le_bytes();
+        let len = w.write(b.as_slice()).map_err(Error::Io)?;
+        Ok(len)
+    }
+}
+impl Encodable for u64 {
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let b = self.to_le_bytes();
+        let len = w.write(b.as_slice()).map_err(Error::Io)?;
+        Ok(len)
+    }
+}
+
+impl Encodable for CompactSize{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        
     }
 }
