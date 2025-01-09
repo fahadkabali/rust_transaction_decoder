@@ -251,8 +251,7 @@ pub trait Encodable{
 }
 impl Encodable for u8{
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let b = self.to_le_bytes();
-        let len = w.write(b.as_slice()).map_err(Error::Io)?;
+        let len = w.write([*self].as_slice()).map_err(Error::Io)?;
         Ok(len)
     }
 }
@@ -279,18 +278,55 @@ impl Encodable for u64 {
     }
 }
 
+impl Encodable for [u8; 32]{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let len = w.write(self.as_slice()).map_err(Error::Io)?;
+        Ok(len)
+    }
+}
+
+impl Encodable for String{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let bytes = hex::decode(self).expect("Should be a valid hex string");//map_err(|e| Error::new(Error::Error::InvalidData, e))?;
+        let len = CompactSize(bytes.len() as u64).consensus_encoder(w)?;
+        let len2 = w.write(&bytes).map_err(Error::Io)?;
+        Ok(len + len2)
+    }
+}
+
 impl Encodable for CompactSize{
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let mut len = 0;
-
-        match len{
-            0..=0xFC => len += self.0.consensus_encoder(w)?,
-            0xFD..=0xFFFF => len += 0xFD.consensus_encoder(w)? + (self.0 as u16).consensus_encoder(w)?,
-            0x10000..=0xFFFFFFFF => len += 0xFE.consensus_encoder(w)? + (self.0 as u32).consensus_encoder(w)?,
-            _ => len += 0xFF.consensus_encoder(w)? + self.0.consensus_encoder(w)?,
+        match self.0{
+            0..=0xFC =>{
+                {self.0 as u8}.consensus_encoder(w)?;
+                Ok(1)
             }
-        Ok(len)
+            0xFD..=0xFFFF =>{
+                w.write([0xFD].as_slice()).map_err(Error::Io)?;
+                (self.0 as u16).consensus_encoder(w)?;
+                Ok(3)
+            }
+            0x10000..=0xFFFFFFFF =>{
+                w.write([0xFE].as_slice()).map_err(Error::Io)?;
+                (self.0 as u32).consensus_encoder(w)?;
+                Ok(5)
+            }
+            _ =>{
+                w.write([0xFF].as_slice()).map_err(Error::Io)?;
+                self.0.consensus_encoder(w)?;
+                Ok(9)
+            }
         }
+
+    }
+}        // match len{
+        //     0..=0xFC => len += self.0.consensus_encoder(w)?,
+        //     0xFD..=0xFFFF => len += 0xFD.consensus_encoder(w)? + (self.0 as u16).consensus_encoder(w)?,
+        //     0x10000..=0xFFFFFFFF => len += 0xFE.consensus_encoder(w)? + (self.0 as u32).consensus_encoder(w)?,
+        //     _ => len += 0xFF.consensus_encoder(w)? + self.0.consensus_encoder(w)?,
+        //     }
+        // Ok(len)
+        // }
         // if self.0 < 0xFD{
         //     len += self.0.consensus_encoder(w)?;
         // }else if self.0 <= 0xFFFF{
@@ -305,62 +341,63 @@ impl Encodable for CompactSize{
         // }
         // Ok(len)
     
-}
 
-impl Encodable for String{
-    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let bytes = hex::decode(self).map_err(|e| Error::new(Error::Error::InvalidData, e))?;
-        let len = CompactSize(bytes.len() as u64).consensus_encoder(w)?;
-        let len2 = w.write(bytes.as_slice()).map_err(Error::Io)?;
-        Ok(len + len2)
-    }
-}
+
+
 
 impl  Encodable for Vec <TxIn> {
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let len = CompactSize(self.len() as u64).consensus_encoder(w)?;
-        let len2 = w.write(self.as_slice()).map_err(Error::Io)?;
-        Ok(len + len2)
+        let mut len = 0;
+        len += CompactSize(self.len() as u64).consensus_encoder(w)?;
+        for txin in self.iter(){
+            len += txin.consensus_encoder(w)?;
+        }
+        Ok(len)
     }
     
 }
-impl Encodable for TxIn{
-    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let len = self.txid.consensus_encoder(w)?;
-        let len2 = self.output_index.consensus_encoder(w)?;
-        let len3 = self.script_sig.consensus_encoder(w)?;
-        let len4 = self.sequence.consensus_encoder(w)?;
-        Ok(len + len2 + len3 + len4)
-    }
-}
+
 impl Encodable for Txid{
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let len = w.write(self.0.as_slice()).map_err(Error::Io)?;
+        let len = self.0.consensus_encoder(w)?;
         Ok(len)
     }
 }
+
+impl Encodable for TxIn{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let mut len = 0;
+        len += self.txid.consensus_encoder(w)?;
+        len += self.output_index.consensus_encoder(w)?;
+        len += self.script_sig.consensus_encoder(w)?;
+        len += self.sequence.consensus_encoder(w)?;
+        Ok(len)
+    }
+}
+
 impl Encodable for Vec<TxOut>{
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let len = CompactSize(self.len() as u64).consensus_encoder(w)?;
-        let len2 = w.write(self.as_slice()).map_err(Error::Io)?;
-        Ok(len + len2)
+        let mut len = 0;
+        len += CompactSize(self.len() as u64).consensus_encoder(w)?;
+        for txout in self.iter(){
+            len += txout.consensus_encoder(w)?;
+        }
+        Ok(len)
     }
+}
+impl Encodable for Amount{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let len = self.0.consensus_encoder(w)?;
+        Ok(len)
+    }
+
 }
 
 impl Encodable for TxOut{
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let len = self.amount.consensus_encoder(w)?;
-        let len2 = self.script_pubkey.consensus_encoder(w)?;
-        Ok(len + len2)
-    }
-}
-
-impl Encodable for Transaction{
-    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let len = self.version.consensus_encoder(w)?;
-        let len2 = self.inputs.consensus_encoder(w)?;
-        let len3 = self.outputs.consensus_encoder(w)?;
-        let len4 = self.lock_time.consensus_encoder(w)?;
-        Ok(len + len2 + len3 + len4)
+        let mut len = 0;
+        len += self.amount.consensus_encoder(w)?;
+        len += self.script_pubkey.consensus_encoder(w)?;
+        Ok(len)
     }
 }
