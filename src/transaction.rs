@@ -33,8 +33,11 @@ pub struct Transaction {
 
 impl Transaction{
     pub fn compute_txid(&self) -> Txid{
-        // todo: implement this
-        let txid_data = vec![0;32];
+        let mut txid_data = Vec::new();
+        self.version.consensus_encoder(&mut txid_data).expect("version");
+        self.inputs.consensus_encoder(&mut txid_data).expect("inputs");
+        self.outputs.consensus_encoder(&mut txid_data).expect("outputs");
+        self.lock_time.consensus_encoder(&mut txid_data).expect("lock_time");
         Txid::from_raw_transaction(txid_data)
         }
 }
@@ -42,7 +45,7 @@ impl Transaction{
 impl Serialize for Transaction {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>{
         let mut tx = serializer.serialize_struct("Transaction", 5)?;
-        tx.serialize_field("transaction_id", &self.txid())?;
+        tx.serialize_field("transaction_id", &self.compute_txid())?;
         tx.serialize_field("version", &self.version)?;
         tx.serialize_field("inputs", &self.inputs)?;
         tx.serialize_field("outputs", &self.outputs)?;
@@ -287,7 +290,7 @@ impl Encodable for [u8; 32]{
 
 impl Encodable for String{
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        let bytes = hex::decode(self).expect("Should be a valid hex string");//map_err(|e| Error::new(Error::Error::InvalidData, e))?;
+        let bytes = hex::decode(self).expect("Should be a valid hex string");
         let len = CompactSize(bytes.len() as u64).consensus_encoder(w)?;
         let len2 = w.write(&bytes).map_err(Error::Io)?;
         Ok(len + len2)
@@ -319,31 +322,7 @@ impl Encodable for CompactSize{
         }
 
     }
-}        // match len{
-        //     0..=0xFC => len += self.0.consensus_encoder(w)?,
-        //     0xFD..=0xFFFF => len += 0xFD.consensus_encoder(w)? + (self.0 as u16).consensus_encoder(w)?,
-        //     0x10000..=0xFFFFFFFF => len += 0xFE.consensus_encoder(w)? + (self.0 as u32).consensus_encoder(w)?,
-        //     _ => len += 0xFF.consensus_encoder(w)? + self.0.consensus_encoder(w)?,
-        //     }
-        // Ok(len)
-        // }
-        // if self.0 < 0xFD{
-        //     len += self.0.consensus_encoder(w)?;
-        // }else if self.0 <= 0xFFFF{
-        //     len += 0xFD.consensus_encoder(w)?;
-        //     len += (self.0 as u16).consensus_encoder(w)?;
-        // }else if self.0 <= 0xFFFFFFFF{
-        //     len += 0xFE.consensus_encoder(w)?;
-        //     len += (self.0 as u32).consensus_encoder(w)?;
-        // }else{
-        //     len += 0xFF.consensus_encoder(w)?;
-        //     len += self.0.consensus_encoder(w)?;
-        // }
-        // Ok(len)
-    
-
-
-
+}      
 
 impl  Encodable for Vec <TxIn> {
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
