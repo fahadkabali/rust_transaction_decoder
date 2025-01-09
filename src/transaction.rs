@@ -333,11 +333,34 @@ impl Encodable for TxIn{
         Ok(len + len2 + len3 + len4)
     }
 }
+impl Encodable for Txid{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let len = w.write(self.0.as_slice()).map_err(Error::Io)?;
+        Ok(len)
+    }
+}
+impl Encodable for Vec<TxOut>{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let len = CompactSize(self.len() as u64).consensus_encoder(w)?;
+        let len2 = w.write(self.as_slice()).map_err(Error::Io)?;
+        Ok(len + len2)
+    }
+}
 
 impl Encodable for TxOut{
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
         let len = self.amount.consensus_encoder(w)?;
         let len2 = self.script_pubkey.consensus_encoder(w)?;
         Ok(len + len2)
+    }
+}
+
+impl Encodable for Transaction{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let len = self.version.consensus_encoder(w)?;
+        let len2 = self.inputs.consensus_encoder(w)?;
+        let len3 = self.outputs.consensus_encoder(w)?;
+        let len4 = self.lock_time.consensus_encoder(w)?;
+        Ok(len + len2 + len3 + len4)
     }
 }
