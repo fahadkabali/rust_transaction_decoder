@@ -281,6 +281,63 @@ impl Encodable for u64 {
 
 impl Encodable for CompactSize{
     fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
-        
+        let mut len = 0;
+
+        match len{
+            0..=0xFC => len += self.0.consensus_encoder(w)?,
+            0xFD..=0xFFFF => len += 0xFD.consensus_encoder(w)? + (self.0 as u16).consensus_encoder(w)?,
+            0x10000..=0xFFFFFFFF => len += 0xFE.consensus_encoder(w)? + (self.0 as u32).consensus_encoder(w)?,
+            _ => len += 0xFF.consensus_encoder(w)? + self.0.consensus_encoder(w)?,
+            }
+        Ok(len)
+        }
+        // if self.0 < 0xFD{
+        //     len += self.0.consensus_encoder(w)?;
+        // }else if self.0 <= 0xFFFF{
+        //     len += 0xFD.consensus_encoder(w)?;
+        //     len += (self.0 as u16).consensus_encoder(w)?;
+        // }else if self.0 <= 0xFFFFFFFF{
+        //     len += 0xFE.consensus_encoder(w)?;
+        //     len += (self.0 as u32).consensus_encoder(w)?;
+        // }else{
+        //     len += 0xFF.consensus_encoder(w)?;
+        //     len += self.0.consensus_encoder(w)?;
+        // }
+        // Ok(len)
+    
+}
+
+impl Encodable for String{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let bytes = hex::decode(self).map_err(|e| Error::new(Error::Error::InvalidData, e))?;
+        let len = CompactSize(bytes.len() as u64).consensus_encoder(w)?;
+        let len2 = w.write(bytes.as_slice()).map_err(Error::Io)?;
+        Ok(len + len2)
+    }
+}
+
+impl  Encodable for Vec <TxIn> {
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let len = CompactSize(self.len() as u64).consensus_encoder(w)?;
+        let len2 = w.write(self.as_slice()).map_err(Error::Io)?;
+        Ok(len + len2)
+    }
+    
+}
+impl Encodable for TxIn{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let len = self.txid.consensus_encoder(w)?;
+        let len2 = self.output_index.consensus_encoder(w)?;
+        let len3 = self.script_sig.consensus_encoder(w)?;
+        let len4 = self.sequence.consensus_encoder(w)?;
+        Ok(len + len2 + len3 + len4)
+    }
+}
+
+impl Encodable for TxOut{
+    fn consensus_encoder <W: Write> (&self, w: &mut W) -> Result<usize, Error>{
+        let len = self.amount.consensus_encoder(w)?;
+        let len2 = self.script_pubkey.consensus_encoder(w)?;
+        Ok(len + len2)
     }
 }
