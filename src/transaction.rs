@@ -11,12 +11,14 @@ use sha2::{Sha256, Digest};
 
 #[derive(Debug)]
 pub enum Error{
-    Io(std::io::Error)
+    Io(std::io::Error),
+    UnSupportedSegwitFlag(u8),
 }
 impl fmt::Display for Error{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::Io(e) => write!(f, "IO Error: {}", e)
+        match *self {
+            Error::Io(e) => write!(f, "IO Error: {}", e),
+            Error::UnSupportedSegwitFlag(swflag) => write!(f, "Unsupported Segwit Flag: {}", swflag),
         }
     }
 }
@@ -104,6 +106,28 @@ pub struct TxIn {
     pub output_index: u32,
     pub script_sig: String,
     pub sequence: u32,
+    pub witness: Witness,
+
+}
+
+#[derive(Debug, Serialize)]
+pub struct Witness{
+    content: Vec<Vec<u8>>,
+}
+
+impl Witness {
+    pub fn new() -> Self{
+        Witness{content: vec![]}
+    }
+}
+impl Serialize for Witness{
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut seq = s.serialize_seq(Some(self.content.len()))?;
+        for item in self.content.iter() {
+            seq.serialize_element(&hex::encode(item))?;
+        }
+        seq.end()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -204,7 +228,22 @@ impl Decodable for TxIn{
             output_index: u32::consensus_decode(r)?,
             script_sig: String::consensus_decode(r)?,
             sequence: u32::consensus_decode(r)?,
+            witness: Witness::new(),
         })
+    }
+}
+
+impl Decodable for Witness{
+    fn consensus_decode <R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error>{
+        let mut witness_items =vec![];
+        let count = u8::consensus_decode(r)?;
+        for _ in 0..count {
+            let len = CompactSize::consensus_decode(r)?.0;
+            let mut buffer = vec![0; len as usize];
+            r.read_exact(&mut buffer).map_err(Error::Io)?;
+            witness_items.push(buffer);
+        }
+        Ok(Witness{content: witness_items})
     }
 }
 
@@ -239,6 +278,29 @@ impl Decodable for TxOut{
 
 impl Decodable for Transaction{
     fn consensus_decode <R: BufRead + ?Sized>(r: &mut R) ->Result<Self, Error>{
+        let version = u32::consensus_decode(r)?;
+        let inputs = Vec::<TxIn>::consensus_decode(r)?;
+        if inputs.is_empty(){
+            let segwit_flag = u8::consensus_decode(r)?;
+            match segwit_flag{
+                1 => {
+                    let mut inputs = Vec::<TxIn>::consensus_decode(r)?;
+                    let outputs = Vec::<TxOut>::consensus_decode(r)?;
+                    for txin in inputs.iter_mut(){
+                        txin.witness = Witness::consensus_decode(r)?;
+                    }
+                    Ok(Transaction{
+                        version,
+                        inputs,
+                        outputs,
+                        lock_time: u32::consensus_decode(r)?,
+                    })
+                },
+                x => Err(Error::UnSupportedSegwitFlag(x))?
+            }
+            return Err(Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, "No inputs")));
+        }
+        let outputs = Vec::<TxOut>::consensus_decode(r)?;   
         Ok(Transaction{
             version: u32::consensus_decode(r)?,
             inputs: Vec::<TxIn>::consensus_decode(r)?,
