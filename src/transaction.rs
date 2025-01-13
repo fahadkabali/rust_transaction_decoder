@@ -18,7 +18,7 @@ pub enum Error{
 impl fmt::Display for Error{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::Io(e) => write!(f, "IO Error: {}", e),
+            Error::Io(ref e) => write!(f, "IO Error: {}", e),
             Error::UnSupportedSegwitFlag(swflag) => write!(f, "Unsupported Segwit Flag: {}", swflag),
             Error::ParseFailed(s) => write!(f, "parse failed: {}", s),
         }
@@ -309,8 +309,8 @@ impl Decodable for Transaction{
                     for txin in inputs.iter_mut(){
                         txin.witness = Witness::consensus_decode(r)?;
                     }
-                    if inputs.is_empty() && inputs.iter().all(|input| input.witness.is_empty()){
-                        return Err(Error::ParseFailed("No inputs or witness data"))
+                    if !inputs.is_empty() && inputs.iter().all(|input| input.witness.is_empty()){
+                        Err(Error::ParseFailed("No inputs or witness flag set but witness data not found"))?
                     }else{
                         Ok(Transaction{
                             version,
@@ -328,8 +328,8 @@ impl Decodable for Transaction{
             inputs,
             outputs: Vec::<TxOut>::consensus_decode(r)?,
             lock_time: u32::consensus_decode(r)?,
-        })}
-        let outputs = Vec::<TxOut>::consensus_decode(r)?;   
+        })
+    }
        
     }
 }
