@@ -13,12 +13,14 @@ use sha2::{Sha256, Digest};
 pub enum Error{
     Io(std::io::Error),
     UnSupportedSegwitFlag(u8),
+    ParseFailed(&'static str),
 }
 impl fmt::Display for Error{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::Io(e) => write!(f, "IO Error: {}", e),
             Error::UnSupportedSegwitFlag(swflag) => write!(f, "Unsupported Segwit Flag: {}", swflag),
+            Error::ParseFailed(s) => write!(f, "parse failed: {}", s),
         }
     }
 }
@@ -100,17 +102,30 @@ impl BitcoinValue for Amount {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct TxIn {
     pub txid: Txid,
     pub output_index: u32,
     pub script_sig: String,
-    pub sequence: u32,
     pub witness: Witness,
+    pub sequence: u32,
 
 }
+impl Serialize for TxIn {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut txin = s.serialize_struct("TxIn", 5)?;
+        txin.serialize_field("txid", &self.txid)?;
+        txin.serialize_field("vout", &self.output_index)?;
+        txin.serialize_field("script_sig", &self.script_sig)?;
+        if !&self.witness.is_empty() {
+            txin.serialize_field("txinwitness", &self.witness)?;
+        }
+        txin.serialize_field("sequence", &self.sequence)?;
+        txin.end()
+    }
+}
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct Witness{
     content: Vec<Vec<u8>>,
 }
@@ -119,12 +134,17 @@ impl Witness {
     pub fn new() -> Self{
         Witness{content: vec![]}
     }
+    pub fn is_empty(&self) -> bool{
+        self.content.is_empty()
+    }
 }
 impl Serialize for Witness{
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error> 
+        where
+            S: Serializer{
         let mut seq = s.serialize_seq(Some(self.content.len()))?;
         for item in self.content.iter() {
-            seq.serialize_element(&hex::encode(item))?;
+            seq.serialize_element(&hex::encode(&item))?;
         }
         seq.end()
     }
@@ -289,24 +309,28 @@ impl Decodable for Transaction{
                     for txin in inputs.iter_mut(){
                         txin.witness = Witness::consensus_decode(r)?;
                     }
-                    Ok(Transaction{
-                        version,
-                        inputs,
-                        outputs,
-                        lock_time: u32::consensus_decode(r)?,
-                    })
+                    if inputs.is_empty() && inputs.iter().all(|input| input.witness.is_empty()){
+                        return Err(Error::ParseFailed("No inputs or witness data"))
+                    }else{
+                        Ok(Transaction{
+                            version,
+                            inputs,
+                            outputs,
+                            lock_time: u32::consensus_decode(r)?,
+                        })
+                    }
+                        
                 },
                 x => Err(Error::UnSupportedSegwitFlag(x))?
             }
-            return Err(Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, "No inputs")));
-        }
-        let outputs = Vec::<TxOut>::consensus_decode(r)?;   
-        Ok(Transaction{
-            version: u32::consensus_decode(r)?,
-            inputs: Vec::<TxIn>::consensus_decode(r)?,
+        }else{ Ok(Transaction{
+            version,
+            inputs,
             outputs: Vec::<TxOut>::consensus_decode(r)?,
             lock_time: u32::consensus_decode(r)?,
-        })
+        })}
+        let outputs = Vec::<TxOut>::consensus_decode(r)?;   
+       
     }
 }
 
